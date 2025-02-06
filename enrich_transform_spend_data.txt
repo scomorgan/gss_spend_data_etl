@@ -1,9 +1,12 @@
 let
+    //==============================================================\\
+    // Load and Transform Source Data
+    //==============================================================\\
     Source = Csv.Document(
         File.Contents("C:\Users\scomorga\OneDrive - Microsoft\Business Intelligence\Category Planning\Category Plan Sheets Prep\FY25\Source_Data\final\AIC_Spend_Data.csv"),
-        [Delimiter=",", Columns=53, Encoding=1252, QuoteStyle=QuoteStyle.None]
+        [Delimiter = ",", Columns = 53, Encoding = 1252, QuoteStyle = QuoteStyle.None]
     ),
-    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
     #"Changed Type" = Table.TransformColumnTypes(
         #"Promoted Headers",
         {
@@ -50,135 +53,125 @@ let
             {"Baseline Segment/Managed Spend Type", type text}
         }
     ),
-    #"Added 'Reporting Date '" = Table.AddColumn(
+
+    //==============================================================\\
+    // Add Reporting Date
+    //==============================================================\\
+    #"Added 'Reporting Date'" = Table.AddColumn(
         #"Changed Type",
         "Reporting Date",
         each if [Reporting Year] = null or [Financial Period] = null then null
         else 
             Date.EndOfMonth(
                 #date(
-                    Number.From([Reporting Year]), 
+                    Number.From([Reporting Year]),
                     if [Financial Period] + 6 > 12 then [Financial Period] - 6 else [Financial Period] + 6,
                     1
                 )
             )
     ),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Added 'Reporting Date '", {{"Reporting Date", type date}}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Added 'Reporting Date'", {{"Reporting Date", type date}}),
 
     //==============================================================\\
-    // Remap "Managed Status" By Specific Suppliers
+    // Remap Managed Status
     //==============================================================\\
-    #"Remap Managed Status by Supplier" =
-        Table.AddColumn(
-            #"Changed Type1",
-            "Managed Status (Temp1)",
-            each 
-                if [Normalized Supplier] = "LINKEDIN" then "Managed by GSS"
-                else if [Normalized Supplier] = "TRINUS" then "Managed by GSS"
-                else if [Normalized Supplier] = "GRANITE MANAGEMENT SERVICES" then "Not Managed By GSS or IBE"
-                else if [Normalized Supplier] = "WILLIS TOWERS WATSON" then "Not Managed by GSS or IBE"
-                else if [Normalized Supplier] = "NSIGHT INC" then "Not Managed by GSS or IBE"
+    #"Remap Managed Status by Supplier" = Table.AddColumn(
+        #"Changed Type1",
+        "Managed Status (Temp1)",
+        each 
+            if [Normalized Supplier] = "LINKEDIN" then "Managed by GSS"
+            else if [Normalized Supplier] = "TRINUS" then "Managed by GSS"
+            else if [Normalized Supplier] = "GRANITE MANAGEMENT SERVICES" then "Not Managed By GSS or IBE"
+            else if [Normalized Supplier] = "WILLIS TOWERS WATSON" then "Not Managed by GSS or IBE"
+            else if [Normalized Supplier] = "NSIGHT INC" then "Not Managed by GSS or IBE"
             else if [Category 1] = "Human Resources" 
                 and List.Contains({"HR Services", "Training and Development"}, [Category 2]) 
                 and [Managed Status] = "Out of scope for GSS or IBE" then "Non-Managed by GSS or IBE"
             else if [Category 1] = "Meetings & Events " 
                 and [Category 2] = "External Events" 
                 and [Managed Status] = "Out of scope for GSS or IBE" then "Non-Managed by GSS or IBE"
-                else [Managed Status] // fallback
-        ),
-
-    #"Removed Old Managed Status" = 
-        Table.RemoveColumns(#"Remap Managed Status by Supplier", {"Managed Status"}),
-
-    #"Renamed Managed Status (Temp1)" =
-        Table.RenameColumns(#"Removed Old Managed Status", {{"Managed Status (Temp1)", "Managed Status"}}),
+            else [Managed Status] // fallback
+    ),
+    #"Removed Old Managed Status" = Table.RemoveColumns(#"Remap Managed Status by Supplier", {"Managed Status"}),
+    #"Renamed Managed Status (Temp1)" = Table.RenameColumns(#"Removed Old Managed Status", {{"Managed Status (Temp1)", "Managed Status"}}),
 
     //==============================================================\\
     // Addressable Overrides
     //==============================================================\\
-    // *** FIXED THIS REFERENCE *** now uses #"Renamed Managed Status (Temp1)"
-    #"Remap Addressable" =
-        Table.AddColumn(
-            #"Renamed Managed Status (Temp1)",  // <<--- CHANGED to Temp1
-            "Addressable (Temp)",
-            each 
-                if [Category 1] = "Workplace" and [Category 2] = "Occupancy" and [Category 3] = "Gas & Electric"
-                   and [Addressable] = "Addressable"
-                   and [Managed Status] = "Out of scope for GSS or IBE"
-                then "Non-Addressable"
-                else if [Normalized Supplier] = {"CARPINTERIA CITY OF", "COMPTROLLER OF MARYLAND-UNCLAIMED PROPERTY", 
-                                                  "COLORADO TREASURY’S UNCLAIMED PROPERTY DIVISION", 
-                                                  "LOUISIANA DEPT OF TREASURY", "DELAWARE STATE OF"}
-                then "Non-Addressable"
-                else [Addressable]
-        ),
-
-    #"Removed Old Addressable" =
-        Table.RemoveColumns(#"Remap Addressable", {"Addressable"}),
-
-    #"Renamed Addressable (Temp)" =
-        Table.RenameColumns(#"Removed Old Addressable", {{"Addressable (Temp)", "Addressable"}}),
+    #"Remap Addressable" = Table.AddColumn(
+        #"Renamed Managed Status (Temp1)",
+        "Addressable (Temp)",
+        each 
+            if [Category 1] = "Workplace" and [Category 2] = "Occupancy" and [Category 3] = "Gas & Electric"
+               and [Addressable] = "Addressable"
+               and [Managed Status] = "Out of scope for GSS or IBE"
+            then "Non-Addressable"
+            else if [Normalized Supplier] = {"CARPINTERIA CITY OF", "COMPTROLLER OF MARYLAND-UNCLAIMED PROPERTY", 
+                                              "COLORADO TREASURY’S UNCLAIMED PROPERTY DIVISION", 
+                                              "LOUISIANA DEPT OF TREASURY", "DELAWARE STATE OF"}
+            then "Non-Addressable"
+            else [Addressable]
+    ),
+    #"Removed Old Addressable" = Table.RemoveColumns(#"Remap Addressable", {"Addressable"}),
+    #"Renamed Addressable (Temp)" = Table.RenameColumns(#"Removed Old Addressable", {{"Addressable (Temp)", "Addressable"}}),
 
     //==============================================================\\
-    // Remap "Normalized Supplier" values
+    // Remap Normalized Supplier
     //==============================================================\\
-    #"Remap Normalized Supplier" =
-        Table.AddColumn(
-            #"Renamed Addressable (Temp)",
-            "Normalized Supplier (Temp)",
-            each
-                if [Normalized Supplier] = "Advito" then "BCD travel"
-                else if [Normalized Supplier] = "Pluxee" then "Sodexo"
-                else if [Normalized Supplier] = "Workforce Logiq" then "MAGNIT"
-                else [Normalized Supplier] // fallback
-        ),
+    #"Remap Normalized Supplier" = Table.AddColumn(
+        #"Renamed Addressable (Temp)",
+        "Normalized Supplier (Temp)",
+        each
+            if [Normalized Supplier] = "Advito" then "BCD Travel"
+            else if [Normalized Supplier] = "Pluxee" then "Sodexo"
+            else if [Normalized Supplier] = "Workforce Logiq" then "MAGNIT"
+            else [Normalized Supplier] // fallback
+    ),
+    #"Removed Old Normalized Supplier" = Table.RemoveColumns(#"Remap Normalized Supplier", {"Normalized Supplier"}),
+    #"Renamed Normalized Supplier (Temp)" = Table.RenameColumns(#"Removed Old Normalized Supplier", {{"Normalized Supplier (Temp)", "Normalized Supplier"}}),
 
-    #"Removed Old Normalized Supplier" =
-        Table.RemoveColumns(#"Remap Normalized Supplier", {"Normalized Supplier"}),
+    //==============================================================\\
+    // Combine LinkedIn Employee with American Express
+    //==============================================================\\
+    #"Combine LinkedIn Employee and American Express" = Table.AddColumn(
+        #"Renamed Normalized Supplier (Temp)",
+        "Supplier Adjustment (Temp)",
+        each
+            if [Normalized Supplier] = "LINKEDIN EMPLOYEE" 
+               and [Supplier Name] = "LinkedIn Employee" 
+               and [Category 1] = "Travel Partners" 
+               and [Category 2] = "Travel Management & Support Companies" 
+               and [Category 3] = null 
+            then "AMERICAN EXPRESS"
+            else [Normalized Supplier]
+    ),
+    #"Removed Temporary Adjustment" = Table.RemoveColumns(#"Combine LinkedIn Employee and American Express", {"Normalized Supplier"}),
+    #"Renamed Supplier Adjustment" = Table.RenameColumns(#"Removed Temporary Adjustment", {{"Supplier Adjustment (Temp)", "Normalized Supplier"}}),
 
-    #"Renamed Normalized Supplier (Temp)" =
-        Table.RenameColumns(#"Removed Old Normalized Supplier", {{"Normalized Supplier (Temp)", "Normalized Supplier"}}),
-    
-// 1. Merge the main table with the mapping table
-#"Merged Supplier-Segment" =
-    Table.NestedJoin(
-        #"Renamed Normalized Supplier (Temp)",    // or your prior step name
+    //==============================================================\\
+    // Final Adjustments and Output
+    //==============================================================\\
+    #"Merged Supplier-Segment" = Table.NestedJoin(
+        #"Renamed Supplier Adjustment",
         {"Normalized Supplier"},
-        SupplierSegmentMapping,                  // your external mapping query
+        SupplierSegmentMapping,
         {"Normalized Supplier"},
         "SegmentMapping",
         JoinKind.LeftOuter
     ),
-
-// 2. Expand the [Segment] from the mapping
-#"Expanded Segment" =
-    Table.ExpandTableColumn(
+    #"Expanded Segment" = Table.ExpandTableColumn(
         #"Merged Supplier-Segment",
         "SegmentMapping",
         {"Segment"},
         {"New Segment"}
     ),
-
-// 3. Use "Tactical" as the fallback if [New Segment] is null
-#"Apply New Segment" =
-    Table.AddColumn(
+    #"Apply New Segment" = Table.AddColumn(
         #"Expanded Segment",
         "Segment (Temp)",
-        each if [New Segment] <> null
-             then [New Segment]
-             else "Tactical"
+        each if [New Segment] <> null then [New Segment] else "Tactical"
     ),
+    #"Removed Old Segment" = Table.RemoveColumns(#"Apply New Segment", {"Segment", "New Segment"}),
+    #"Renamed Segment Column" = Table.RenameColumns(#"Removed Old Segment", {{"Segment (Temp)", "Segment"}})
 
-// 4. Remove old columns and rename
-#"Removed Old Segment" =
-    Table.RemoveColumns(#"Apply New Segment", {"Segment", "New Segment"}),
-
-#"Renamed Segment Column" =
-    Table.RenameColumns(#"Removed Old Segment", {{"Segment (Temp)", "Segment"}})
-
-
-/*************************************************************
-   Final output
-*************************************************************/
 in
     #"Renamed Segment Column"
